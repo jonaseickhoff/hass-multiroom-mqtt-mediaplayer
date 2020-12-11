@@ -2,7 +2,7 @@
 MQTT MediaPlayer with Multiroom support for Homeassistant.
 
 I build this MQTT MediaPlayer because i was looking for an integration for my musiccast2mqtt bridge in homeassistant. 
-This MQTT MediaPlayer is able to subscribe to different topics and for every topic there also exists an template.
+This MQTT MediaPlayer is able to subscribe to different topics and for every topic there also can be configured a template.
 
 ## Example Configuration
 
