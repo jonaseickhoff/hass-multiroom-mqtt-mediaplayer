@@ -102,8 +102,13 @@ MULTIROOMCLIENTS = "multiroom_clients"
 MULTIROOMCLIENTS_TOPIC = "multiroom_clients_topic"
 MULTIROOMCLIENTS_TEMPLATE = "multiroom_clients_template"
 
+MULTIROOM_MASTER = "multiroom_master"
+MULTIROOM_MASTER_TOPIC = "multiroom_master_topic"
+MULTIROOM_MASTER_TEMPLATE = "multiroom_master_template"
+
 # END of TOPICS
 
+PAYLOAD_MULTIROOM_MASTER = "payload_multiroom_master"
 PAYLOAD_PLAYERSTATUS = "payload_playingstatus"
 PAYLOAD_POWEROFFSTATUS = "payload_poweroff"
 MULTIROOMID = "multiroom_id"
@@ -157,6 +162,8 @@ PLATFORM_SCHEMA = mqtt.MQTT_BASE_PLATFORM_SCHEMA.extend(
         vol.Optional(ALBUMARTURL_TEMPLATE): cv.template,
         vol.Optional(MULTIROOMCLIENTS_TOPIC): mqtt.valid_subscribe_topic,
         vol.Optional(MULTIROOMCLIENTS_TEMPLATE): cv.template,
+        vol.Optional(MULTIROOM_MASTER_TOPIC): mqtt.valid_subscribe_topic,
+        vol.Optional(MULTIROOM_MASTER_TEMPLATE): cv.template,
         vol.Optional(NEXT_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(PREVIOUS_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(PLAY_ACTION): cv.SCRIPT_SCHEMA,
@@ -174,6 +181,7 @@ PLATFORM_SCHEMA = mqtt.MQTT_BASE_PLATFORM_SCHEMA.extend(
         vol.Optional(UNJOIN_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(PAYLOAD_PLAYERSTATUS): cv.string,
         vol.Optional(PAYLOAD_POWEROFFSTATUS): cv.string,  
+        vol.Optional(PAYLOAD_MULTIROOM_MASTER): cv.string
     }
 )
 
@@ -234,6 +242,7 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         self._select_source_script = None
         self._join_script = None
         self._unjoin_script = None
+        self._isGroupMaster = None
 
 
         if next_action := config.get(NEXT_ACTION):
@@ -311,6 +320,7 @@ class MQTTMediaPlayer(MediaPlayerEntity):
                 ALBUMART_TOPIC,
                 ALBUMARTURL_TOPIC,
                 MULTIROOMCLIENTS_TOPIC,
+                MULTIROOM_MASTER_TOPIC,
             )
         }
         self._templates = {
@@ -326,10 +336,12 @@ class MQTTMediaPlayer(MediaPlayerEntity):
             ALBUMART: config.get(ALBUMART_TEMPLATE),
             ALBUMARTURL: config.get(ALBUMARTURL_TEMPLATE),
             MULTIROOMCLIENTS: config.get(MULTIROOMCLIENTS_TEMPLATE),
+            MULTIROOM_MASTER: config.get(MULTIROOM_MASTER_TEMPLATE),
         }
         self._payload = {
              "POWER_OFF": config[PAYLOAD_POWEROFFSTATUS],
              "PLAYER_PLAYING": config[PAYLOAD_PLAYERSTATUS],
+             "MULTIROOM_MASTER": config[PAYLOAD_MULTIROOM_MASTER]
         }
 
         for key, tpl in list(self._templates.items()):
@@ -431,6 +443,11 @@ class MQTTMediaPlayer(MediaPlayerEntity):
     def repeat(self):
         """Return current repeat mode."""
         return None
+
+    @property
+    def is_master(self):
+        """Return true if it is a master."""
+        return self._isGroupMaster
 
     async def async_get_media_image(self):
         """Fetch media image of current playing image."""
@@ -804,6 +821,26 @@ class MQTTMediaPlayer(MediaPlayerEntity):
             topics[MULTIROOMCLIENTS_TOPIC] = {
                 "topic": self._topic[MULTIROOMCLIENTS_TOPIC],
                 "msg_callback": multiroomclients_received,
+                "qos": self._config[CONF_QOS],
+            }
+
+        @callback
+        @log_messages(self.hass, self.entity_id)
+        def multiroommaster_received(msg):
+            """Handle new received MQTT message."""
+            payload = self._templates[MULTIROOM_MASTER](msg.payload)
+            if(isinstance(payload, bool)):
+                self._isGroupMaster = payload
+            elif(isinstance(payload, str)):
+                self._isGroupMaster = payload == self._payload["MULTIROOM_MASTER"]
+            if MQTTMediaPlayer:
+                self.schedule_update_ha_state(False)
+           
+
+        if self._topic[MULTIROOM_MASTER_TOPIC] is not None:
+            topics[MULTIROOM_MASTER_TOPIC] = {
+                "topic": self._topic[MULTIROOM_MASTER_TOPIC],
+                "msg_callback": multiroommaster_received,
                 "qos": self._config[CONF_QOS],
             }
         
