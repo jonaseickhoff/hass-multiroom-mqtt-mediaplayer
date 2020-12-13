@@ -21,6 +21,8 @@ This MQTT MediaPlayer is able to subscribe to different topics and for every top
   song_album_topic: "musiccast_test/status/kitchen/player/album"
   albumart_url_topic: "musiccast_test/status/kitchen/player/albumarturl"
   multiroom_clients_topic: "musiccast_test/status/kitchen/link/clients"
+  multiroom_master_topic: "musiccast_test/status/kitchen/link/role"
+  payload_multiroom_master: "server"
   payload_playingstatus: "play"
   payload_poweroff: "standby"
   volume:
