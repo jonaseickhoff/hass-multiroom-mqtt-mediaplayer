@@ -36,6 +36,9 @@ from homeassistant.components.media_player.const import (
     SUPPORT_VOLUME_MUTE,
     SUPPORT_VOLUME_SET,
     SUPPORT_VOLUME_STEP,
+    SUPPORT_SHUFFLE_SET,
+    SUPPORT_REPEAT_SET,
+    SUPPORT_SELECT_SOUND_MODE,
 )
 from homeassistant.const import (
     CONF_NAME,
@@ -78,17 +81,33 @@ SOURCELIST = "sourcelist"
 SOURCELIST_TOPIC = "sourcelist_topic"
 SOURCELIST_TEMPLATE = "sourcelist_template"
 
+SOUNDMODE = "soundmode"
+SOUNDMODE_TOPIC = "soundmode_topic"
+SOUNDMODE_TEMPLATE = "soundmode_template"
+
+SOUNDMODELIST = "soundmodelist"
+SOUNDMODELIST_TOPIC = "soundmodelist_topic"
+SOUNDMODELIST_TEMPLATE = "soundmodelist_template"
+
 MUTE = "mute"
 MUTE_TOPIC = "mute_topic"
 MUTE_TEMPLATE = "mute_template"
 
+POWER = "power"
 POWER_TOPIC = "power_topic"
 POWER_TEMPLATE = "power_tempalte"
-POWER = "power"
 
 PLAYERSTATUS_TOPIC = "player_status_topic"
 PLAYERSTATUS_TEMPLATE = "player_status_template"
 PLAYERSTATUS = "player_status"
+
+SHUFFLE = "shuffle"
+SHUFFLE_TOPIC = "shuffle_topic"
+SHUFFLE_TEMPLATE = "shuffle_template"
+
+REPEAT = "repeat"
+REPEAT_TOPIC = "repeat_topic"
+REPEAT_TEMPLATE = "repeat_template"
 
 ALBUMART = "albumart"
 ALBUMART_TOPIC = "albumart_topic"
@@ -126,6 +145,9 @@ VOL_MUTE_ACTION = "vol_mute"
 VOL_UNMUTE_ACTION = "vol_unmute"
 VOLUME_ACTION = "volume"
 SELECT_SOURCE_ACTION = "select_source"
+SELECT_SOUNDMODE_ACTION = "select_soundmode"
+SHUFFLE_ACTION = "shuffle"
+REPEAT_ACTION = "repeat"
 
 JOIN_ACTION = "join"
 UNJOIN_ACTION = "unjoin"
@@ -152,10 +174,18 @@ PLATFORM_SCHEMA = mqtt.MQTT_BASE_PLATFORM_SCHEMA.extend(
         vol.Optional(SOURCE_TEMPLATE): cv.template,
         vol.Optional(SOURCELIST_TOPIC): mqtt.valid_subscribe_topic,
         vol.Optional(SOURCELIST_TEMPLATE): cv.template,   
+        vol.Optional(SOUNDMODE_TOPIC): mqtt.valid_subscribe_topic,
+        vol.Optional(SOUNDMODE_TEMPLATE): cv.template,
+        vol.Optional(SOUNDMODELIST_TOPIC): mqtt.valid_subscribe_topic,
+        vol.Optional(SOUNDMODELIST_TEMPLATE): cv.template,   
         vol.Optional(POWER_TOPIC): mqtt.valid_subscribe_topic,
         vol.Optional(POWER_TEMPLATE): cv.template,
         vol.Optional(PLAYERSTATUS_TOPIC): mqtt.valid_subscribe_topic,
         vol.Optional(PLAYERSTATUS_TEMPLATE): cv.template,
+        vol.Optional(SHUFFLE_TOPIC): mqtt.valid_subscribe_topic,
+        vol.Optional(SHUFFLE_TEMPLATE): cv.template,
+        vol.Optional(REPEAT_TOPIC): mqtt.valid_subscribe_topic,
+        vol.Optional(REPEAT_TEMPLATE): cv.template,
         vol.Optional(ALBUMART_TOPIC): mqtt.valid_subscribe_topic,
         vol.Optional(ALBUMART_TEMPLATE): cv.template,
         vol.Optional(ALBUMARTURL_TOPIC): mqtt.valid_subscribe_topic,
@@ -176,7 +206,10 @@ PLATFORM_SCHEMA = mqtt.MQTT_BASE_PLATFORM_SCHEMA.extend(
         vol.Optional(VOL_UNMUTE_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(POWER_ON_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(POWER_OFF_ACTION): cv.SCRIPT_SCHEMA,
+        vol.Optional(SHUFFLE_ACTION): cv.SCRIPT_SCHEMA,
+        vol.Optional(REPEAT_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(SELECT_SOURCE_ACTION): cv.SCRIPT_SCHEMA,
+        vol.Optional(SELECT_SOUNDMODE_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(JOIN_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(UNJOIN_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(PAYLOAD_PLAYERSTATUS): cv.string,
@@ -225,8 +258,13 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         self._albumart_url = ""
         self._source = None
         self._source_list = []
+        self._soundmode = None
+        self._soundmode_list = []
         self._mute = False
-        self._power = "standby"
+        self._power = None
+        self._shuffle = False
+        self._repeat = None
+
         self._next_script = None
         self._previous_script = None
         self._play_script = None
@@ -239,7 +277,10 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         self._vol_script = None
         self._power_on_script = None
         self._power_off_script = None
+        self._shuffle_script = None
+        self._repeat_script = None
         self._select_source_script = None
+        self._select_soundmode_script = None
         self._join_script = None
         self._unjoin_script = None
         self._isGroupMaster = None
@@ -269,12 +310,19 @@ class MQTTMediaPlayer(MediaPlayerEntity):
             self._power_on_script = Script(hass, power_on_action, self._name, self._domain)
         if power_off_action :=config.get(POWER_OFF_ACTION):
             self._power_off_script = Script(hass, power_off_action, self._name, self._domain)
+        if shuffle_action :=config.get(SHUFFLE_ACTION):
+            self._unjoin_script = Script(hass, shuffle_action, self._name, self._domain)
+        if repeat_action :=config.get(REPEAT_ACTION):
+            self._unjoin_script = Script(hass, repeat_action, self._name, self._domain)
         if select_source_action :=config.get(SELECT_SOURCE_ACTION):
             self._select_source_script = Script(hass, select_source_action, self._name, self._domain)
+        if select_soundmode_action :=config.get(SELECT_SOUNDMODE_ACTION):
+            self._select_soundmode_script = Script(hass, select_soundmode_action, self._name, self._domain)
         if join_action :=config.get(JOIN_ACTION):
             self._join_script = Script(hass, join_action, self._name, self._domain)
         if unjoin_action :=config.get(UNJOIN_ACTION):
             self._unjoin_script = Script(hass, unjoin_action, self._name, self._domain)
+        
 
         self._supported_features = (
             SUPPORT_PLAY
@@ -289,7 +337,10 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         self._supported_features |= self._power_on_script is not None and SUPPORT_TURN_ON
         self._supported_features |= self._vol_script is not None and SUPPORT_VOLUME_SET
         self._supported_features |= self._stop_script is not None and SUPPORT_STOP
+        self._supported_features |= self._shuffle_script is not None and SUPPORT_SHUFFLE_SET
+        self._supported_features |= self._repeat_script is not None and SUPPORT_REPEAT_SET
         self._supported_features |= self._select_source_script is not None and SUPPORT_SELECT_SOURCE
+        self._supported_features |= self._select_soundmode_script is not None and SUPPORT_SELECT_SOUND_MODE
 
         # Load config
         self._setup_from_config(config)
@@ -312,6 +363,8 @@ class MQTTMediaPlayer(MediaPlayerEntity):
                 PLAYERSTATUS_TOPIC,
                 SOURCE_TOPIC,
                 SOURCELIST_TOPIC,
+                SOUNDMODE_TOPIC,
+                SOUNDMODELIST_TOPIC,
                 VOL_TOPIC,
                 MUTE_TOPIC,
                 SONGTITLE_TOPIC,
@@ -319,6 +372,8 @@ class MQTTMediaPlayer(MediaPlayerEntity):
                 SONGALBUM_TOPIC,
                 ALBUMART_TOPIC,
                 ALBUMARTURL_TOPIC,
+                SHUFFLE_TOPIC,
+                REPEAT_TOPIC,
                 MULTIROOMCLIENTS_TOPIC,
                 MULTIROOM_MASTER_TOPIC,
             )
@@ -328,11 +383,15 @@ class MQTTMediaPlayer(MediaPlayerEntity):
             PLAYERSTATUS: config.get(PLAYERSTATUS_TEMPLATE),
             SOURCE: config.get(SOURCE_TEMPLATE),
             SOURCELIST: config.get(SOURCELIST_TEMPLATE),
+            SOUNDMODE: config.get(SOUNDMODE_TEMPLATE),
+            SOUNDMODELIST : config.get(SOUNDMODELIST_TEMPLATE),
             VOL: config.get(VOL_TEMPLATE),
             MUTE: config.get(MUTE_TEMPLATE),
             SONGTITLE: config.get(SONGTITLE_TEMPLATE),
             SONGARTIST: config.get(SONGARTIST_TEMPLATE),
             SONGALBUM: config.get(SONGALBUM_TEMPLATE),
+            SHUFFLE: config.get(SHUFFLE_TEMPLATE),
+            REPEAT: config.get(REPEAT_TEMPLATE),
             ALBUMART: config.get(ALBUMART_TEMPLATE),
             ALBUMARTURL: config.get(ALBUMARTURL_TEMPLATE),
             MULTIROOMCLIENTS: config.get(MULTIROOMCLIENTS_TEMPLATE),
@@ -437,12 +496,22 @@ class MQTTMediaPlayer(MediaPlayerEntity):
     @property
     def shuffle(self):
         """Boolean if shuffle is enabled."""
-        return None
+        return self._shuffle
 
     @property
     def repeat(self):
         """Return current repeat mode."""
-        return None
+        return self._repeat
+
+    @property
+    def sound_mode(self):
+        """Name of the current sound mode."""
+        return self._soundmode
+
+    @property
+    def sound_mode_list(self):
+        """List of available sound modes."""
+        return self._soundmode_list
 
     @property
     def is_master(self):
@@ -544,6 +613,28 @@ class MQTTMediaPlayer(MediaPlayerEntity):
             await self._select_source_script.async_run(
                 {"source": source}, context=self._context
             )
+
+    async def async_select_sound_mode(self, sound_mode):
+        """Select sound mode."""
+        if self._select_soundmode_script:
+            await self._select_soundmode_script.async_run(
+                {"soundmode": sound_mode}, context=self._context
+            )
+
+    async def async_set_shuffle(self, shuffle):
+        """Enable/disable shuffle mode."""
+        if self._shuffle_script:
+            await self._shuffle_script.async_run(
+                {"shuffle": shuffle}, context=self._context
+            )
+
+    async def async_set_repeat(self, repeat):
+        """Set repeat mode."""
+        if self._repeat_script:
+            await self._repeat_script.async_run(
+                {"repeat": repeat}, context=self._context
+            )
+
 
     # Multiroom 
 
@@ -677,6 +768,77 @@ class MQTTMediaPlayer(MediaPlayerEntity):
             topics[SOURCELIST_TOPIC] = {
                 "topic": self._topic[SOURCELIST_TOPIC],
                 "msg_callback": sourcelist_received,
+                "qos": self._config[CONF_QOS],
+            }
+
+        @callback
+        @log_messages(self.hass, self.entity_id)
+        def soundmode_received(msg):
+            """Handle new received MQTT message."""
+            payload = self._templates[SOUNDMODE](msg.payload)
+            self._soundmode = payload
+            if MQTTMediaPlayer:
+                self.schedule_update_ha_state(False)
+           
+
+        if self._topic[SOUNDMODE_TOPIC] is not None:
+            topics[SOUNDMODE_TOPIC] = {
+                "topic": self._topic[SOUNDMODE_TOPIC],
+                "msg_callback": soundmode_received,
+                "qos": self._config[CONF_QOS],
+            }
+
+        @callback
+        @log_messages(self.hass, self.entity_id)
+        def soundmodelist_received(msg):
+            """Handle new received MQTT message."""
+            payload = self._templates[SOUNDMODELIST](msg.payload)
+            if(isinstance(payload, str)):
+                self._soundmode_list = json.loads(payload)
+            if(isinstance(payload, list)):
+                self._soundmode_list = payload
+            if MQTTMediaPlayer:
+                self.schedule_update_ha_state(False)
+           
+
+        if self._topic[SOUNDMODELIST_TOPIC] is not None:
+            topics[SOUNDMODELIST_TOPIC] = {
+                "topic": self._topic[SOUNDMODELIST_TOPIC],
+                "msg_callback": soundmodelist_received,
+                "qos": self._config[CONF_QOS],
+            }
+
+        @callback
+        @log_messages(self.hass, self.entity_id)
+        def shuffle_received(msg):
+            """Handle new received MQTT message."""
+            payload = self._templates[SHUFFLE](msg.payload)
+            self._shuffle = payload
+            if MQTTMediaPlayer:
+                self.schedule_update_ha_state(False)
+           
+
+        if self._topic[SHUFFLE_TOPIC] is not None:
+            topics[SHUFFLE_TOPIC] = {
+                "topic": self._topic[SHUFFLE_TOPIC],
+                "msg_callback": shuffle_received,
+                "qos": self._config[CONF_QOS],
+            }
+
+        @callback
+        @log_messages(self.hass, self.entity_id)
+        def repeat_received(msg):
+            """Handle new received MQTT message."""
+            payload = self._templates[REPEAT](msg.payload)
+            self._repeat = payload
+            if MQTTMediaPlayer:
+                self.schedule_update_ha_state(False)
+           
+
+        if self._topic[REPEAT_TOPIC] is not None:
+            topics[REPEAT_TOPIC] = {
+                "topic": self._topic[REPEAT_TOPIC],
+                "msg_callback": repeat_received,
                 "qos": self._config[CONF_QOS],
             }
 
