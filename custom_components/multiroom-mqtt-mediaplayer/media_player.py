@@ -6,6 +6,7 @@ import voluptuous as vol
 import base64
 import json
 
+from homeassistant import util
 from homeassistant.core import callback
 from homeassistant.components.mqtt.debug_info import log_messages
 
@@ -57,17 +58,25 @@ _LOGGER = logging.getLogger(__name__)
 
 # TOPICS
 
-SONGTITLE = "song_title"
-SONGTITLE_TOPIC = "song_title_topic"
-SONGTITLE_TEMPLATE = "song_title_template"
+MEDIA_TITLE = "media_title"
+MEDIA_TITLE_TOPIC = "media_title_topic"
+MEDIA_TITLE_TEMPLATE = "media_title_template"
 
-SONGARTIST = "song_artist"
-SONGARTIST_TOPIC = "song_artist_topic"
-SONGARTIST_TEMPLATE = "song_artist_template"
+MEDIA_ARTIST = "media_artist"
+MEDIA_ARTIST_TOPIC = "media_artist_topic"
+MEDIA_ARTIST_TEMPLATE = "media_artist_template"
 
-SONGALBUM = "song_album"
-SONGALBUM_TOPIC = "song_album_topic"
-SONGALBUM_TEMPLATE = "song_album_template"
+MEDIA_ALBUM = "media_album"
+MEDIA_ALBUM_TOPIC = "media_album_topic"
+MEDIA_ALBUM_TEMPLATE = "media_album_template"
+
+MEDIA_POSITION = "media_position"
+MEDIA_POSITION_TOPIC = "media_position_topic"
+MEDIA_POSITION_TEMPLATE = "media_position_template"
+
+MEDIA_DURATION = "media_duration"
+MEDIA_DURATION_TOPIC = "media_duration_topic"
+MEDIA_DURATION_TEMPLATE = "media_duration_template"
 
 VOL = "volume"
 VOL_TOPIC = "volume_topic"
@@ -136,6 +145,7 @@ NEXT_ACTION = "next"
 PREVIOUS_ACTION = "previous"
 PLAY_ACTION = "play"
 PAUSE_ACTION = "pause"
+SEEK_ACTION = "seek"
 STOP_ACTION = "stop"
 POWER_ON_ACTION = "power_on"
 POWER_OFF_ACTION = "power_off"
@@ -160,12 +170,16 @@ PLATFORM_SCHEMA = mqtt.MQTT_BASE_PLATFORM_SCHEMA.extend(
     {
         vol.Required(CONF_NAME): cv.string,       
         vol.Optional(MULTIROOMID): cv.string,
-        vol.Optional(SONGTITLE_TOPIC): mqtt.valid_subscribe_topic,
-        vol.Optional(SONGTITLE_TEMPLATE): cv.template,
-        vol.Optional(SONGALBUM_TOPIC): mqtt.valid_subscribe_topic,
-        vol.Optional(SONGALBUM_TEMPLATE): cv.template,
-        vol.Optional(SONGARTIST_TOPIC): mqtt.valid_subscribe_topic,
-        vol.Optional(SONGARTIST_TEMPLATE): cv.template,
+        vol.Optional(MEDIA_TITLE_TOPIC): mqtt.valid_subscribe_topic,
+        vol.Optional(MEDIA_TITLE_TEMPLATE): cv.template,
+        vol.Optional(MEDIA_ALBUM_TOPIC): mqtt.valid_subscribe_topic,
+        vol.Optional(MEDIA_ALBUM_TEMPLATE): cv.template,
+        vol.Optional(MEDIA_ARTIST_TOPIC): mqtt.valid_subscribe_topic,
+        vol.Optional(MEDIA_ARTIST_TEMPLATE): cv.template,
+        vol.Optional(MEDIA_POSITION_TOPIC): mqtt.valid_subscribe_topic,
+        vol.Optional(MEDIA_POSITION_TEMPLATE): cv.template,
+        vol.Optional(MEDIA_DURATION_TOPIC): mqtt.valid_subscribe_topic,
+        vol.Optional(MEDIA_DURATION_TEMPLATE): cv.template,
         vol.Optional(VOL_TOPIC): mqtt.valid_subscribe_topic,
         vol.Optional(VOL_TEMPLATE): cv.template,
         vol.Optional(MUTE_TOPIC): mqtt.valid_subscribe_topic,
@@ -199,6 +213,7 @@ PLATFORM_SCHEMA = mqtt.MQTT_BASE_PLATFORM_SCHEMA.extend(
         vol.Optional(PLAY_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(PAUSE_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(STOP_ACTION): cv.SCRIPT_SCHEMA,
+        vol.Optional(SEEK_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(VOLUME_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(VOL_DOWN_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(VOL_UP_ACTION): cv.SCRIPT_SCHEMA,
@@ -253,6 +268,9 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         self._track_artist = ""
         self._track_album_name = ""
         self._mqtt_player_state = None
+        self._media_position = None
+        self._media_position_last_update = None
+        self._media_duration = None
         self._state = None
         self._albumart = None
         self._albumart_url = ""
@@ -270,6 +288,7 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         self._play_script = None
         self._pause_script = None
         self._stop_script = None
+        self._seek_script = None
         self._vol_down_script = None
         self._vol_up_script = None
         self._vol_mute_script = None
@@ -296,6 +315,8 @@ class MQTTMediaPlayer(MediaPlayerEntity):
             self._pause_script = Script(hass, pause_action, self._name, self._domain)
         if stop_action := config.get(STOP_ACTION):
             self._stop_script = Script(hass, stop_action, self._name, self._domain)
+        if seek_action := config.get(SEEK_ACTION):
+            self._seek_script = Script(hass, seek_action, self._name, self._domain)
         if vol_down_action := config.get(VOL_DOWN_ACTION):
             self._vol_down_script = Script(hass, vol_down_action, self._name, self._domain)
         if vol_up_action :=config.get(VOL_UP_ACTION):
@@ -341,6 +362,7 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         self._supported_features |= self._repeat_script is not None and SUPPORT_REPEAT_SET
         self._supported_features |= self._select_source_script is not None and SUPPORT_SELECT_SOURCE
         self._supported_features |= self._select_soundmode_script is not None and SUPPORT_SELECT_SOUND_MODE
+        self._supported_features |= self._seek_script is not None and SUPPORT_SEEK
 
         # Load config
         self._setup_from_config(config)
@@ -367,9 +389,11 @@ class MQTTMediaPlayer(MediaPlayerEntity):
                 SOUNDMODELIST_TOPIC,
                 VOL_TOPIC,
                 MUTE_TOPIC,
-                SONGTITLE_TOPIC,
-                SONGARTIST_TOPIC,
-                SONGALBUM_TOPIC,
+                MEDIA_TITLE_TOPIC,
+                MEDIA_ARTIST_TOPIC,
+                MEDIA_ALBUM_TOPIC,
+                MEDIA_POSITION_TOPIC,
+                MEDIA_DURATION_TOPIC,
                 ALBUMART_TOPIC,
                 ALBUMARTURL_TOPIC,
                 SHUFFLE_TOPIC,
@@ -387,9 +411,11 @@ class MQTTMediaPlayer(MediaPlayerEntity):
             SOUNDMODELIST : config.get(SOUNDMODELIST_TEMPLATE),
             VOL: config.get(VOL_TEMPLATE),
             MUTE: config.get(MUTE_TEMPLATE),
-            SONGTITLE: config.get(SONGTITLE_TEMPLATE),
-            SONGARTIST: config.get(SONGARTIST_TEMPLATE),
-            SONGALBUM: config.get(SONGALBUM_TEMPLATE),
+            MEDIA_TITLE: config.get(MEDIA_TITLE_TEMPLATE),
+            MEDIA_ARTIST: config.get(MEDIA_ARTIST_TEMPLATE),
+            MEDIA_ALBUM: config.get(MEDIA_ALBUM_TEMPLATE),
+            MEDIA_POSITION: config.get(MEDIA_POSITION_TEMPLATE),
+            MEDIA_DURATION: config.get(MEDIA_DURATION_TEMPLATE),
             SHUFFLE: config.get(SHUFFLE_TEMPLATE),
             REPEAT: config.get(REPEAT_TEMPLATE),
             ALBUMART: config.get(ALBUMART_TEMPLATE),
@@ -448,6 +474,23 @@ class MQTTMediaPlayer(MediaPlayerEntity):
     def media_content_type(self):
         """Content type of current playing media."""
         return MEDIA_TYPE_MUSIC
+
+    @property
+    def media_duration(self):
+        """Duration of current playing media in seconds."""
+        return self._media_duration
+
+    @property
+    def media_position(self):
+        """Position of current playing media in seconds."""
+        return self._media_position
+
+    @property
+    def media_position_updated_at(self):
+        """When was the position of the current playing media valid.
+        Returns value from homeassistant.util.dt.utcnow().
+        """
+        return self._media_position_last_update
 
     @property
     def media_title(self):
@@ -606,6 +649,13 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         """Send the previous track command."""
         if self._previous_script:
             await self._previous_script.async_run(context=self._context)
+
+    async def async_media_seek(self, position):
+        """Send seek command."""
+        if self._seek_script:
+            await self._seek_script.async_run(
+                {"position": position}, context=self._context
+            )
 
     async def async_select_source(self, source):
         """Select input source."""
@@ -886,15 +936,15 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         @log_messages(self.hass, self.entity_id)
         def title_received(msg):
             """Handle new received MQTT message."""
-            payload = self._templates[SONGTITLE](msg.payload)
+            payload = self._templates[MEDIA_TITLE](msg.payload)
             self._track_name = payload
             if MQTTMediaPlayer:
                 self.schedule_update_ha_state(False)
            
 
-        if self._topic[SONGTITLE_TOPIC] is not None:
-            topics[SONGTITLE_TOPIC] = {
-                "topic": self._topic[SONGTITLE_TOPIC],
+        if self._topic[MEDIA_TITLE_TOPIC] is not None:
+            topics[MEDIA_TITLE_TOPIC] = {
+                "topic": self._topic[MEDIA_TITLE_TOPIC],
                 "msg_callback": title_received,
                 "qos": self._config[CONF_QOS],
             }
@@ -903,15 +953,15 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         @log_messages(self.hass, self.entity_id)
         def artist_received(msg):
             """Handle new received MQTT message."""
-            payload = self._templates[SONGARTIST](msg.payload)
+            payload = self._templates[MEDIA_ARTIST](msg.payload)
             self._track_artist = payload
             if MQTTMediaPlayer:
                 self.schedule_update_ha_state(False)
            
 
-        if self._topic[SONGARTIST_TOPIC] is not None:
-            topics[SONGARTIST_TOPIC] = {
-                "topic": self._topic[SONGARTIST_TOPIC],
+        if self._topic[MEDIA_ARTIST_TOPIC] is not None:
+            topics[MEDIA_ARTIST_TOPIC] = {
+                "topic": self._topic[MEDIA_ARTIST_TOPIC],
                 "msg_callback": artist_received,
                 "qos": self._config[CONF_QOS],
             }
@@ -920,16 +970,64 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         @log_messages(self.hass, self.entity_id)
         def album_received(msg):
             """Handle new received MQTT message."""
-            payload = self._templates[SONGALBUM](msg.payload)
+            payload = self._templates[MEDIA_ALBUM](msg.payload)
             self._track_album_name = payload
             if MQTTMediaPlayer:
                 self.schedule_update_ha_state(False)
            
 
-        if self._topic[SONGALBUM_TOPIC] is not None:
-            topics[SONGALBUM_TOPIC] = {
-                "topic": self._topic[SONGALBUM_TOPIC],
+        if self._topic[MEDIA_ALBUM_TOPIC] is not None:
+            topics[MEDIA_ALBUM_TOPIC] = {
+                "topic": self._topic[MEDIA_ALBUM_TOPIC],
                 "msg_callback": album_received,
+                "qos": self._config[CONF_QOS],
+            }
+
+        @callback
+        @log_messages(self.hass, self.entity_id)
+        def position_received(msg):
+            """Handle new received MQTT message."""
+            lastUpdate = util.dt.utcnow()
+            payload = self._templates[MEDIA_POSITION](msg.payload)
+            if isinstance(payload, int):
+                self._media_position = payload
+            if isinstance(payload, str):
+                try:
+                    self._media_position = int(payload)
+                except:
+                    pass    
+            self._media_position_last_update = lastUpdate
+            if MQTTMediaPlayer:
+                self.schedule_update_ha_state(False)
+           
+
+        if self._topic[MEDIA_POSITION_TOPIC] is not None:
+            topics[MEDIA_POSITION_TOPIC] = {
+                "topic": self._topic[MEDIA_POSITION_TOPIC],
+                "msg_callback": position_received,
+                "qos": self._config[CONF_QOS],
+            }
+        
+        @callback
+        @log_messages(self.hass, self.entity_id)
+        def duration_received(msg):
+            """Handle new received MQTT message."""
+            payload = self._templates[MEDIA_DURATION](msg.payload)
+            if isinstance(payload, int):
+                self._media_duration = payload
+            if isinstance(payload, str):
+                try:
+                    self._media_duration = int(payload)
+                except:
+                    pass            
+            if MQTTMediaPlayer:
+                self.schedule_update_ha_state(False)
+           
+
+        if self._topic[MEDIA_DURATION_TOPIC] is not None:
+            topics[MEDIA_DURATION_TOPIC] = {
+                "topic": self._topic[MEDIA_DURATION_TOPIC],
+                "msg_callback": duration_received,
                 "qos": self._config[CONF_QOS],
             }
 
@@ -995,6 +1093,7 @@ class MQTTMediaPlayer(MediaPlayerEntity):
                 self._isGroupMaster = payload
             elif(isinstance(payload, str)):
                 self._isGroupMaster = payload == self._payload["MULTIROOM_MASTER"]
+            _LOGGER.debug("Received master_topic: %s", self._isGroupMaster)
             if MQTTMediaPlayer:
                 self.schedule_update_ha_state(False)
            
