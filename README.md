@@ -9,6 +9,7 @@ This MQTT MediaPlayer is able to subscribe to different topics and for every top
 ```
 - platform: multiroom-mqtt-mediaplayer
   name: "kitchen MC"
+  unique_id: d2f97fe6-35fd-4053-b9a0-23cca0ef7d8e
   multiroom_id: "kitchen"
   power_topic: "musiccast_test/status/kitchen/power"
   player_status_topic: "musiccast_test/status/kitchen/player/playback"
