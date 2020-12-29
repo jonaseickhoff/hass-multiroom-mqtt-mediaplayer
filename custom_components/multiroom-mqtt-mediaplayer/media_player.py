@@ -43,6 +43,7 @@ from homeassistant.components.media_player.const import (
 )
 from homeassistant.const import (
     CONF_NAME,
+    CONF_UNIQUE_ID,
     STATE_OFF,
     STATE_PAUSED,
     STATE_PLAYING,
@@ -168,7 +169,8 @@ ATTR_MQTTMULTIROOM_GROUP = 'mqtt_multiroom_group'
 
 PLATFORM_SCHEMA = mqtt.MQTT_BASE_PLATFORM_SCHEMA.extend(
     {
-        vol.Required(CONF_NAME): cv.string,       
+        vol.Required(CONF_NAME): cv.string,     
+        vol.Optional(CONF_UNIQUE_ID): cv.string,
         vol.Optional(MULTIROOMID): cv.string,
         vol.Optional(MEDIA_TITLE_TOPIC): mqtt.valid_subscribe_topic,
         vol.Optional(MEDIA_TITLE_TEMPLATE): cv.template,
@@ -257,6 +259,7 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         self.hass = hass
         self._domain = DOMAIN
         self._name = config.get(CONF_NAME)
+        self._unique_id = config.get(CONF_UNIQUE_ID)
         self._sub_state = None
         self._topic = None
         self._payload = None
@@ -454,6 +457,11 @@ class MQTTMediaPlayer(MediaPlayerEntity):
     def name(self):
         """Return the name of the device."""
         return self._name
+
+    @property
+    def unique_id(self):
+        """Return a unique ID."""
+        return self._unique_id
 
     @property
     def state(self):
