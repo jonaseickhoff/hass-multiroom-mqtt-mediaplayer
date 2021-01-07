@@ -165,7 +165,7 @@ UNJOIN_ACTION = "unjoin"
 
 
 
-ATTR_MQTTMULTIROOM_GROUP = 'mqtt_multiroom_group'
+ATTR_MQTTMULTIROOM_GROUP = DOMAIN + '_group'
 
 PLATFORM_SCHEMA = mqtt.MQTT_BASE_PLATFORM_SCHEMA.extend(
     {
