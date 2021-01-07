@@ -6,7 +6,20 @@ This MQTT MediaPlayer is able to subscribe to different topics and for every top
 
 
 It works perfectly with [Mini Media Player](https://github.com/kalkih/mini-media-player)
-## Example Configuration
+
+## Installation
+
+### Install with [HACS](https://github.com/custom-components/hacs)
+
+Go to the hacs store and use the repo url https://github.com/jonaseickhoff/hass-multiroom-mqtt-mediaplayer and add this as a custom repository under settings.
+
+### Manual
+
+Copy all files from custom_components/multiroom-mqtt-mediaplayer/ to custom_components/multiroom-mqtt-mediaplayer/ inside your config Home Assistant directory.
+
+## Configuration
+
+### Example Configuration
 
 ```
 - platform: multiroom-mqtt-mediaplayer
