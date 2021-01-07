@@ -1,0 +1,7 @@
+{
+    "name": "Multiroom Mqtt Mediaplayer",
+    "domains": [
+        "media_player"
+    ],
+    "render_readme": true
+}
