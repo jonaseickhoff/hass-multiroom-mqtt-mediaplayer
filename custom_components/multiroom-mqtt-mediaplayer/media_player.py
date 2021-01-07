@@ -427,9 +427,9 @@ class MQTTMediaPlayer(MediaPlayerEntity):
             MULTIROOM_MASTER: config.get(MULTIROOM_MASTER_TEMPLATE),
         }
         self._payload = {
-             "POWER_OFF": config[PAYLOAD_POWEROFFSTATUS],
-             "PLAYER_PLAYING": config[PAYLOAD_PLAYERSTATUS],
-             "MULTIROOM_MASTER": config[PAYLOAD_MULTIROOM_MASTER]
+             "POWER_OFF": config.get(PAYLOAD_POWEROFFSTATUS),
+             "PLAYER_PLAYING": config.get(PAYLOAD_PLAYERSTATUS),
+             "MULTIROOM_MASTER": config.get(PAYLOAD_MULTIROOM_MASTER)
         }
 
         for key, tpl in list(self._templates.items()):
