@@ -40,6 +40,8 @@ from homeassistant.components.media_player.const import (
     SUPPORT_SHUFFLE_SET,
     SUPPORT_REPEAT_SET,
     SUPPORT_SELECT_SOUND_MODE,
+    SUPPORT_PLAY_MEDIA,
+    SUPPORT_SEEK,
 )
 from homeassistant.const import (
     CONF_NAME,
@@ -159,13 +161,14 @@ SELECT_SOURCE_ACTION = "select_source"
 SELECT_SOUNDMODE_ACTION = "select_soundmode"
 SHUFFLE_ACTION = "shuffle"
 REPEAT_ACTION = "repeat"
+PLAY_MEDIA_ACTION = "play_media"
 
 JOIN_ACTION = "join"
 UNJOIN_ACTION = "unjoin"
 
-
-
 ATTR_MQTTMULTIROOM_GROUP = DOMAIN + '_group'
+ATTR_MINVOLUME = "min_volume"
+ATTR_MAXVOLUME = "max_volume"
 
 PLATFORM_SCHEMA = mqtt.MQTT_BASE_PLATFORM_SCHEMA.extend(
     {
@@ -231,7 +234,8 @@ PLATFORM_SCHEMA = mqtt.MQTT_BASE_PLATFORM_SCHEMA.extend(
         vol.Optional(UNJOIN_ACTION): cv.SCRIPT_SCHEMA,
         vol.Optional(PAYLOAD_PLAYERSTATUS): cv.string,
         vol.Optional(PAYLOAD_POWEROFFSTATUS): cv.string,  
-        vol.Optional(PAYLOAD_MULTIROOM_MASTER): cv.string
+        vol.Optional(PAYLOAD_MULTIROOM_MASTER): cv.string,
+        vol.Optional(PLAY_MEDIA_ACTION): cv.SCRIPT_SCHEMA,
     }
 )
 
@@ -306,6 +310,7 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         self._join_script = None
         self._unjoin_script = None
         self._isGroupMaster = None
+        self._play_media_script = None
 
 
         if next_action := config.get(NEXT_ACTION):
@@ -335,9 +340,9 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         if power_off_action :=config.get(POWER_OFF_ACTION):
             self._power_off_script = Script(hass, power_off_action, self._name, self._domain)
         if shuffle_action :=config.get(SHUFFLE_ACTION):
-            self._unjoin_script = Script(hass, shuffle_action, self._name, self._domain)
+            self._shuffle_script = Script(hass, shuffle_action, self._name, self._domain)
         if repeat_action :=config.get(REPEAT_ACTION):
-            self._unjoin_script = Script(hass, repeat_action, self._name, self._domain)
+            self._repeat_script = Script(hass, repeat_action, self._name, self._domain)
         if select_source_action :=config.get(SELECT_SOURCE_ACTION):
             self._select_source_script = Script(hass, select_source_action, self._name, self._domain)
         if select_soundmode_action :=config.get(SELECT_SOUNDMODE_ACTION):
@@ -346,6 +351,8 @@ class MQTTMediaPlayer(MediaPlayerEntity):
             self._join_script = Script(hass, join_action, self._name, self._domain)
         if unjoin_action :=config.get(UNJOIN_ACTION):
             self._unjoin_script = Script(hass, unjoin_action, self._name, self._domain)
+        if play_media_action :=config.get(PLAY_MEDIA_ACTION):
+            self._play_media_script = Script(hass, play_media_action, self._name, self._domain)
         
 
         self._supported_features = (
@@ -366,6 +373,7 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         self._supported_features |= self._select_source_script is not None and SUPPORT_SELECT_SOURCE
         self._supported_features |= self._select_soundmode_script is not None and SUPPORT_SELECT_SOUND_MODE
         self._supported_features |= self._seek_script is not None and SUPPORT_SEEK
+        self._supported_features |= self._play_media_script is not None and SUPPORT_PLAY_MEDIA
 
         # Load config
         self._setup_from_config(config)
@@ -429,7 +437,7 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         self._payload = {
              "POWER_OFF": config.get(PAYLOAD_POWEROFFSTATUS),
              "PLAYER_PLAYING": config.get(PAYLOAD_PLAYERSTATUS),
-             "MULTIROOM_MASTER": config.get(PAYLOAD_MULTIROOM_MASTER)
+             "MULTIROOM_MASTER": config.get(PAYLOAD_MULTIROOM_MASTER),
         }
 
         for key, tpl in list(self._templates.items()):
@@ -693,6 +701,12 @@ class MQTTMediaPlayer(MediaPlayerEntity):
                 {"repeat": repeat}, context=self._context
             )
 
+    async def async_play_media(self, media_type, media_id, **kwargs):
+        """Send the play_media command to the media player."""
+        if self._play_media_script:
+            await self._play_media_script.async_run(
+                {"content_type": media_type, "content_id": media_id}, context=self._context
+            )
 
     # Multiroom 
 
