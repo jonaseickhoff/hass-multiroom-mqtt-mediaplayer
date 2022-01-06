@@ -85,6 +85,14 @@ VOL = "volume"
 VOL_TOPIC = "volume_topic"
 VOL_TEMPLATE = "volume_template"
 
+MINVOL = "minvolume"
+MINVOL_TOPIC = "minvolume_topic"
+MINVOL_TEMPLATE = "minvolume_template"
+
+MAXVOL = "maxvolume"
+MAXVOL_TOPIC = "maxvolume_topic"
+MAXVOL_TEMPLATE = "maxvolume_template"
+
 SOURCE = "source"
 SOURCE_TOPIC = "source_topic"
 SOURCE_TEMPLATE = "source_template"
@@ -187,6 +195,10 @@ PLATFORM_SCHEMA = mqtt.MQTT_BASE_PLATFORM_SCHEMA.extend(
         vol.Optional(MEDIA_DURATION_TEMPLATE): cv.template,
         vol.Optional(VOL_TOPIC): mqtt.valid_subscribe_topic,
         vol.Optional(VOL_TEMPLATE): cv.template,
+        vol.Optional(MINVOL_TOPIC): mqtt.valid_subscribe_topic,
+        vol.Optional(MINVOL_TEMPLATE): cv.template,
+        vol.Optional(MAXVOL_TOPIC): mqtt.valid_subscribe_topic,
+        vol.Optional(MAXVOL_TEMPLATE): cv.template,
         vol.Optional(MUTE_TOPIC): mqtt.valid_subscribe_topic,
         vol.Optional(MUTE_TEMPLATE): cv.template,
         vol.Optional(SOURCE_TOPIC): mqtt.valid_subscribe_topic,
@@ -271,6 +283,8 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         self._supported_features = 0
 
         self._volume = 0.0
+        self._minvolume = -80.0
+        self._maxvolume = 0.0
         self._track_name = ""
         self._track_artist = ""
         self._track_album_name = ""
@@ -399,6 +413,8 @@ class MQTTMediaPlayer(MediaPlayerEntity):
                 SOUNDMODE_TOPIC,
                 SOUNDMODELIST_TOPIC,
                 VOL_TOPIC,
+                MINVOL_TOPIC,
+                MAXVOL_TOPIC,
                 MUTE_TOPIC,
                 MEDIA_TITLE_TOPIC,
                 MEDIA_ARTIST_TOPIC,
@@ -421,6 +437,8 @@ class MQTTMediaPlayer(MediaPlayerEntity):
             SOUNDMODE: config.get(SOUNDMODE_TEMPLATE),
             SOUNDMODELIST : config.get(SOUNDMODELIST_TEMPLATE),
             VOL: config.get(VOL_TEMPLATE),
+            MINVOL: config.get(MINVOL_TEMPLATE),
+            MAXVOL: config.get(MAXVOL_TEMPLATE),
             MUTE: config.get(MUTE_TEMPLATE),
             MEDIA_TITLE: config.get(MEDIA_TITLE_TEMPLATE),
             MEDIA_ARTIST: config.get(MEDIA_ARTIST_TEMPLATE),
@@ -480,6 +498,16 @@ class MQTTMediaPlayer(MediaPlayerEntity):
     def volume_level(self):
         """Volume level of the media player (0..1)."""
         return self._volume
+
+    @property
+    def minvolume_level(self):
+        """Minimum volume level of the media player (absolute)."""
+        return self._minvolume
+
+    @property
+    def maxvolume_level(self):
+        """Maximum volume level of the media player (absolute)."""
+        return self._maxvolume
 
     @property
     def is_volume_muted(self):
@@ -619,7 +647,7 @@ class MQTTMediaPlayer(MediaPlayerEntity):
             return
         if self._vol_script:
             await self._vol_script.async_run(
-                {"volume": volume * 100}, context=self._context
+                {"volume": volume * (self._maxvolume - self._minvolume) + self._minvolume}, context=self._context
             )
             self._volume = volume
 
@@ -759,11 +787,13 @@ class MQTTMediaPlayer(MediaPlayerEntity):
             self.schedule_update_ha_state(False)
 
     @property
-    def device_state_attributes(self):
+    def extra_state_attributes(self):
         """Return entity specific state attributes."""
         attributes = {
             ATTR_MQTTMULTIROOM_GROUP: [e.entity_id for e
                                    in self._multiroom_group],
+            ATTR_MINVOLUME: self._minvolume,
+            ATTR_MAXVOLUME: self._maxvolume,
         }
         return attributes
 
@@ -918,22 +948,69 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         @log_messages(self.hass, self.entity_id)
         def volume_received(msg):
             """Handle new received MQTT message."""
-            payload = self._templates[SOURCELIST](msg.payload)
+            payload = self._templates[VOL](msg.payload)
             if isinstance(payload, int):
-                self._volume = int(payload) / 100.0
+                self._volume = int(payload)
             if isinstance(payload, str):
                 try:
-                    self._volume = float(payload) / 100.0
+                    self._volume = float(payload)
                 except:
                     pass
+            self._volume = (self._volume - self._minvolume) / (self._maxvolume - self._minvolume)
             if MQTTMediaPlayer:
                 self.schedule_update_ha_state(False)
-           
+
 
         if self._topic[VOL_TOPIC] is not None:
             topics[VOL_TOPIC] = {
                 "topic": self._topic[VOL_TOPIC],
                 "msg_callback": volume_received,
+                "qos": self._config[CONF_QOS],
+            }
+
+        @callback
+        @log_messages(self.hass, self.entity_id)
+        def minvolume_received(msg):
+            """Handle new received MQTT message."""
+            payload = self._templates[MINVOL](msg.payload)
+            if isinstance(payload, int):
+                self._minvolume = int(payload)
+            if isinstance(payload, str):
+                try:
+                    self._minvolume = float(payload)
+                except:
+                    pass
+            if MQTTMediaPlayer:
+                self.schedule_update_ha_state(False)
+
+
+        if self._topic[MINVOL_TOPIC] is not None:
+            topics[MINVOL_TOPIC] = {
+                "topic": self._topic[MINVOL_TOPIC],
+                "msg_callback": minvolume_received,
+                "qos": self._config[CONF_QOS],
+            }
+
+        @callback
+        @log_messages(self.hass, self.entity_id)
+        def maxvolume_received(msg):
+            """Handle new received MQTT message."""
+            payload = self._templates[MAXVOL](msg.payload)
+            if isinstance(payload, int):
+                self._maxvolume = int(payload)
+            if isinstance(payload, str):
+                try:
+                    self._maxvolume = float(payload)
+                except:
+                    pass
+            if MQTTMediaPlayer:
+                self.schedule_update_ha_state(False)
+
+
+        if self._topic[MAXVOL_TOPIC] is not None:
+            topics[MAXVOL_TOPIC] = {
+                "topic": self._topic[MAXVOL_TOPIC],
+                "msg_callback": maxvolume_received,
                 "qos": self._config[CONF_QOS],
             }
         
