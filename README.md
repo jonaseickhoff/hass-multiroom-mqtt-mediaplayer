@@ -1,17 +1,17 @@
-# hass-multiroom-mqtt-mediaplayer
-MQTT MediaPlayer with Multiroom support for Homeassistant.
+# Multiroom and Roon MQTT Media Player
 
-I build this MQTT MediaPlayer because i was looking for an integration for my [musiccast2mqtt](https://github.com/jonaseickhoff/musiccast2mqtt) bridge in homeassistant. 
-This MQTT MediaPlayer is able to subscribe to different topics and for every topic there also can be configured a template.
+MQTT MediaPlayer with multiroom and Roon support for [Home Assistant](https://www.home-assistant.io).
+
+This MQTT MediaPlayer has initially been built to interface with the [musiccast2mqtt](https://github.com/jonaseickhoff/musiccast2mqtt) bridge in Home Assistant. It's possible to subscribe to different topics and use specific templates per topic.
 
 
-It works perfectly with [Mini Media Player](https://github.com/kalkih/mini-media-player) and [Roon MQTT extension](https://github.com/fjgalesloot/roon-extension-mqtt)
+It works perfectly with [Mini Media Player](https://github.com/kalkih/mini-media-player) and [Roon MQTT extension](https://github.com/nseibert/roon-extension-mqtt)
 
 ## Installation
 
 ### Install with [HACS](https://github.com/custom-components/hacs)
 
-Go to the hacs store and use the repo url https://github.com/jonaseickhoff/hass-multiroom-mqtt-mediaplayer and add this as a custom repository under settings.
+Go to the HACS store and use the repo url https://github.com/nseibert/hass-multiroom-mqtt-mediaplayer and add this as a custom repository under settings.
 
 ### Manual
 

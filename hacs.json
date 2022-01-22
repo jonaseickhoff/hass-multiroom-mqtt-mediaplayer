@@ -1,5 +1,5 @@
 {
-    "name": "Multiroom Mqtt Mediaplayer",
+    "name": "MQTT media player with multiroom and Roon support",
     "domains": [
         "media_player"
     ],
