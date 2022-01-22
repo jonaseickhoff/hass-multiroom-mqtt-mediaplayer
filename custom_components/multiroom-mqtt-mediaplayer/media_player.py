@@ -283,8 +283,8 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         self._supported_features = 0
 
         self._volume = 0.0
-        self._minvolume = -80.0
-        self._maxvolume = 0.0
+        self._minvolume = 0.0
+        self._maxvolume = 100.0
         self._track_name = ""
         self._track_artist = ""
         self._track_album_name = ""
