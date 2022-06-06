@@ -23,7 +23,9 @@ from homeassistant.components.mqtt import (
     CONF_QOS,
     subscription
 )
-
+from homeassistant.components.mqtt.config import (
+    MQTT_BASE_SCHEMA
+)
 from homeassistant.components.media_player.const import (
     MEDIA_TYPE_MUSIC,
     SUPPORT_NEXT_TRACK,
@@ -167,8 +169,9 @@ UNJOIN_ACTION = "unjoin"
 
 ATTR_MQTTMULTIROOM_GROUP = DOMAIN + '_group'
 
-PLATFORM_SCHEMA = mqtt.MQTT_BASE_PLATFORM_SCHEMA.extend(
+PLATFORM_SCHEMA = MQTT_BASE_SCHEMA.extend(
     {
+        vol.Required("platform"): cv.string,     
         vol.Required(CONF_NAME): cv.string,     
         vol.Optional(CONF_UNIQUE_ID): cv.string,
         vol.Optional(MULTIROOMID): cv.string,
@@ -1113,6 +1116,10 @@ class MQTTMediaPlayer(MediaPlayerEntity):
                 "qos": self._config[CONF_QOS],
             }
         
-        self._sub_state = await subscription.async_subscribe_topics(
+        self._sub_state = subscription.async_prepare_subscribe_topics(
             self.hass, self._sub_state, topics
+        )
+        
+        await subscription.async_subscribe_topics(
+            self.hass, self._sub_state
         )
