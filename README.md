@@ -1,17 +1,17 @@
-# hass-multiroom-mqtt-mediaplayer
-MQTT MediaPlayer with Multiroom support for Homeassistant.
+# Multiroom and Roon MQTT Media Player
 
-I build this MQTT MediaPlayer because i was looking for an integration for my [musiccast2mqtt](https://github.com/jonaseickhoff/musiccast2mqtt) bridge in homeassistant. 
-This MQTT MediaPlayer is able to subscribe to different topics and for every topic there also can be configured a template.
+MQTT MediaPlayer with multiroom and Roon support for [Home Assistant](https://www.home-assistant.io).
+
+This MQTT MediaPlayer has initially been built to interface with the [musiccast2mqtt](https://github.com/jonaseickhoff/musiccast2mqtt) bridge in Home Assistant. It's possible to subscribe to different topics and use specific templates per topic.
 
 
-It works perfectly with [Mini Media Player](https://github.com/kalkih/mini-media-player)
+It works perfectly with [Mini Media Player](https://github.com/kalkih/mini-media-player) and [Roon MQTT extension](https://github.com/nseibert/roon-extension-mqtt)
 
 ## Installation
 
 ### Install with [HACS](https://github.com/custom-components/hacs)
 
-Go to the hacs store and use the repo url https://github.com/jonaseickhoff/hass-multiroom-mqtt-mediaplayer and add this as a custom repository under settings.
+Go to the HACS store and use the repo url https://github.com/jonaseickhoff/hass-multiroom-mqtt-mediaplayer and add this as a custom repository under settings.
 
 ### Manual
 
@@ -105,4 +105,125 @@ Copy all files from custom_components/multiroom-mqtt-mediaplayer/ to custom_comp
       payload: ""
 ```
 
+### Roon
+
+#### Zones and outputs
+
+Roon manages zones and outputs per zone. In many configurations there will be just one outpost per zone. In this example "living room" is the zone and "streamer" is the output.
+
+	roon/[zone]/...
+	roon/[zone]/outputs/[output]/...
+
+#### IP address and port
+
+Currently there is no way to retrieve ip and port from the Roon API. Therefore it is necessary to look them up in the Roon UI (settings > web) and set them in _albumart_url_template_.
+
+#### Play media
+
+The following Roon hierarchies are supported for _content_type_ and the first search result is used:
+
+- playlists
+- internet_radio
+- albums
+- artists
+- genres
+- composers
+
+#### Example configuration
+
+The following configuration fits for use with the [Roon MQTT extension](https://github.com/fjgalesloot/roon-extension-mqtt).
+
+```
+- platform: multiroom-mqtt-mediaplayer
+  name: "Streamer in living room"
+  unique_id: 78dfe64fdc7c4474b95552b4ffa83f90
+  multiroom_id: "Roon"
+  power_topic: "roon/living room/outputs/streamer/source_controls/0/status"
+  player_status_topic: "roon/living room/state"
+  volume_topic: "roon/living room/outputs/streamer/volume/value"
+  minvolume_topic: "roon/living room/outputs/streamer/volume/min"
+  maxvolume_topic: "roon/living room/outputs/streamer/volume/max"
+  mute_topic: "roon/living room/outputs/streamer/volume/is_muted"
+  media_title_topic: "roon/living room/now_playing/three_line/line1"
+  media_artist_topic: "roon/living room/now_playing/three_line/line2"
+  media_album_topic: "roon/living room/now_playing/three_line/line3"
+  media_position_topic: "roon/living room/seek_position"
+  media_duration_topic: "roon/living room/now_playing/length"
+  albumart_url_topic: "roon/living room/now_playing/image_key"
+  albumart_url_template: "http://192.168.1.65:9330/api/image/{{value}}?&width=400&height=400"
+  payload_playingstatus: "playing"
+  payload_poweroff: "standby"
+  shuffle_topic: "roon/living room/settings/shuffle"
+  repeat_topic: "roon/living room/settings/loop"
+  volume:
+    service: mqtt.publish
+    data:
+      topic: "roon/living room/outputs/streamer/volume/set"
+      payload: "{{volume}}"
+  vol_mute:
+    service: mqtt.publish
+    data:
+      topic: "roon/living room/outputs/streamer/volume/set"
+      payload: "mute"
+  vol_unmute:
+    service: mqtt.publish
+    data:
+      topic: "roon/living room/outputs/streamer/volume/set"
+      payload: "unmute"
+  power_on:
+    service: mqtt.publish
+    data:
+      topic: "roon/living room/outputs/streamer/power"
+      payload: "on"
+  power_off:
+    service: mqtt.publish
+    data:
+      topic: "roon/living room/outputs/streamer/power"
+      payload: "standby"
+  next:
+    service: mqtt.publish
+    data:
+      topic: "roon/living room/command"
+      payload: "next"
+  previous:
+    service: mqtt.publish
+    data:
+      topic: "roon/living room/command"
+      payload: "previous"
+  play:
+    service: mqtt.publish
+    data:
+      topic: "roon/living room/command"
+      payload: "play"
+  stop:
+    service: mqtt.publish
+    data:
+      topic: "roon/living room/command"
+      payload: "stop"
+  pause:
+    service: mqtt.publish
+    data:
+      topic: "roon/living room/command"
+      payload: "pause"
+  play_media:
+    service: mqtt.publish
+    data:
+      topic: "roon/living room/browse/{{content_type}}"
+      payload: "{{content_id}}"
+  seek:
+    service: mqtt.publish
+    data:
+      topic: "roon/living room/seek/set"
+      payload: "{{position}}"
+  shuffle:
+    service: mqtt.publish
+    data:
+      topic: "roon/living room/settings/set/shuffle"
+      payload: "{{shuffle}}"
+  repeat:
+    service: mqtt.publish
+    data:
+      topic: "roon/living room/settings/set/repeat"
+      payload: "{{repeat}}"
+```
 
