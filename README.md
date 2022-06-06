@@ -11,7 +11,7 @@ It works perfectly with [Mini Media Player](https://github.com/kalkih/mini-media
 
 ### Install with [HACS](https://github.com/custom-components/hacs)
 
-Go to the HACS store and use the repo url https://github.com/nseibert/hass-multiroom-mqtt-mediaplayer and add this as a custom repository under settings.
+Go to the HACS store and use the repo url https://github.com/jonaseickhoff/hass-multiroom-mqtt-mediaplayer and add this as a custom repository under settings.
 
 ### Manual
 
