@@ -26,24 +26,10 @@ from homeassistant.components.mqtt import (
 from homeassistant.components.mqtt.config import (
     MQTT_BASE_SCHEMA
 )
-from homeassistant.components.media_player.const import (
-    MEDIA_TYPE_MUSIC,
-    SUPPORT_NEXT_TRACK,
-    SUPPORT_PAUSE,
-    SUPPORT_PLAY,
-    SUPPORT_PREVIOUS_TRACK,
-    SUPPORT_SELECT_SOURCE,
-    SUPPORT_STOP,
-    SUPPORT_TURN_OFF,
-    SUPPORT_TURN_ON,
-    SUPPORT_VOLUME_MUTE,
-    SUPPORT_VOLUME_SET,
-    SUPPORT_VOLUME_STEP,
-    SUPPORT_SHUFFLE_SET,
-    SUPPORT_REPEAT_SET,
-    SUPPORT_SELECT_SOUND_MODE,
-    SUPPORT_PLAY_MEDIA,
-    SUPPORT_SEEK,
+from homeassistant.components.media_player import (
+    MediaPlayerEntityFeature,
+    MediaPlayerState,
+    MediaType,
 )
 from homeassistant.const import (
     CONF_NAME,
@@ -283,7 +269,7 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         self._topic = None
         self._payload = None
         self._templates = None
-        self._supported_features = 0
+        self._supported_features = None
 
         self._volume = 0.0
         self._minvolume = 0.0
@@ -373,24 +359,24 @@ class MQTTMediaPlayer(MediaPlayerEntity):
         
 
         self._supported_features = (
-            SUPPORT_PLAY
-            | SUPPORT_PAUSE
-            | SUPPORT_PREVIOUS_TRACK
-            | SUPPORT_NEXT_TRACK
-            | SUPPORT_VOLUME_STEP
+            MediaPlayerEntityFeature.PLAY
+            | MediaPlayerEntityFeature.PAUSE
+            | MediaPlayerEntityFeature.PREVIOUS_TRACK
+            | MediaPlayerEntityFeature.NEXT_TRACK
+            | MediaPlayerEntityFeature.VOLUME_STEP
         )
 
-        self._supported_features |= (self._vol_mute_script is not None and self._vol_unmute_script is not None and SUPPORT_VOLUME_MUTE)
-        self._supported_features |= self._power_off_script is not None and SUPPORT_TURN_OFF
-        self._supported_features |= self._power_on_script is not None and SUPPORT_TURN_ON
-        self._supported_features |= self._vol_script is not None and SUPPORT_VOLUME_SET
-        self._supported_features |= self._stop_script is not None and SUPPORT_STOP
-        self._supported_features |= self._shuffle_script is not None and SUPPORT_SHUFFLE_SET
-        self._supported_features |= self._repeat_script is not None and SUPPORT_REPEAT_SET
-        self._supported_features |= self._select_source_script is not None and SUPPORT_SELECT_SOURCE
-        self._supported_features |= self._select_soundmode_script is not None and SUPPORT_SELECT_SOUND_MODE
-        self._supported_features |= self._seek_script is not None and SUPPORT_SEEK
-        self._supported_features |= self._play_media_script is not None and SUPPORT_PLAY_MEDIA
+        self._supported_features |= (self._vol_mute_script is not None and self._vol_unmute_script is not None and MediaPlayerEntityFeature.VOLUME_MUTE)
+        self._supported_features |= self._power_off_script is not None and MediaPlayerEntityFeature.TURN_OFF
+        self._supported_features |= self._power_on_script is not None and MediaPlayerEntityFeature.TURN_ON
+        self._supported_features |= self._vol_script is not None and MediaPlayerEntityFeature.VOLUME_SET
+        self._supported_features |= self._stop_script is not None and MediaPlayerEntityFeature.STOP
+        self._supported_features |= self._shuffle_script is not None and MediaPlayerEntityFeature.SHUFFLE_SET
+        self._supported_features |= self._repeat_script is not None and MediaPlayerEntityFeature.REPEAT_SET
+        self._supported_features |= self._select_source_script is not None and MediaPlayerEntityFeature.SELECT_SOURCE
+        self._supported_features |= self._select_soundmode_script is not None and MediaPlayerEntityFeature.SELECT_SOUND_MODE
+        self._supported_features |= self._seek_script is not None and MediaPlayerEntityFeature.SEEK
+        self._supported_features |= self._play_media_script is not None and MediaPlayerEntityFeature.PLAY_MEDIA
 
         # Load config
         self._setup_from_config(config)
@@ -519,8 +505,10 @@ class MQTTMediaPlayer(MediaPlayerEntity):
 
     @property
     def media_content_type(self):
-        """Content type of current playing media."""
-        return MEDIA_TYPE_MUSIC
+        """Return the content type of current playing media."""
+        if self.state in [MediaPlayerState.PLAYING, MediaPlayerState.PAUSED]:
+            return MediaType.MUSIC
+        return MediaPlayerState.STANDBY
 
     @property
     def media_duration(self):
